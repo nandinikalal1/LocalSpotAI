@@ -1,0 +1,32 @@
+# macOS system files
+.DS_Store
+
+# Node & React
+node_modules/
+build/
+.pnp
+.pnp.js
+coverage/
+
+# Python & Flask
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+instance/
+*.sqlite3
+
+# Environment files
+.env
+backend_flask/.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend specific
+frontend_react/node_modules/
+frontend_react/build/
