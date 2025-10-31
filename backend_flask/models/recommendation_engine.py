@@ -3,7 +3,7 @@ import random
 
 def get_recommendations(lat, lng, recent_category=None):
     """
-    Very simple rule-based recommendation:
+    rule-based recommendation:
     - If user recently explored 'parks', recommend 'cafes' nearby (post-walk coffee)
     - If user explored 'gyms', recommend 'restaurants' (post-workout meal)
     - Else pick a random mix

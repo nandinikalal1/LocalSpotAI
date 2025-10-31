@@ -7,7 +7,7 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 UA = "LocalSpotAI/1.0 (contact: you@example.com)"
 
 
-# ---------------------- UTILITY: Distance Calculation ----------------------
+# UTILITY: Distance Calculation
 def _haversine_km(lat1, lon1, lat2, lon2):
     R = 6371.0088
     dlat = math.radians(lat2 - lat1)
@@ -21,7 +21,7 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-# ---------------------- UTILITY: Build Readable Address ----------------------
+#UTILITY: Build Readable Address
 def _build_address(tags):
     house = tags.get("addr:housenumber", "")
     street = tags.get("addr:street", "")
@@ -32,7 +32,7 @@ def _build_address(tags):
     return ", ".join([p for p in parts if p])
 
 
-# ---------------------- CATEGORY MAP ----------------------
+#CATEGORY MAP
 CATEGORY_MAP = {
     "restaurants": ["restaurant", "cafe", "bar", "fast_food"],
     "parks": ["park"],
@@ -43,7 +43,7 @@ CATEGORY_MAP = {
 }
 
 
-# ---------------------- MAIN FUNCTION ----------------------
+#MAIN FUNCTION
 def get_nearby_places(lat, lng, radius_m=2000, included_types=None, max_results=20):
     """
     Fetch nearby places using OpenStreetMap (Overpass API).
@@ -58,10 +58,10 @@ def get_nearby_places(lat, lng, radius_m=2000, included_types=None, max_results=
         # Default: everything
         tags = sum(CATEGORY_MAP.values(), [])
 
-    # 1️⃣ Cache key includes category
+    #Cache key includes category
     cache_key = f"{lat}-{lng}-{radius_m}-{'_'.join(sorted(tags))}"
 
-    # 2️⃣ Check cache with 1-hour TTL
+    #Check cache with 1-hour TTL
     cached_data = get_from_cache(cache_key)
     if cached_data and (time.time() - cached_data["timestamp"] < 3600):
         print("⚡ Served from cache")
@@ -69,7 +69,7 @@ def get_nearby_places(lat, lng, radius_m=2000, included_types=None, max_results=
 
     print(f"🔍 Fetching from Overpass for categories: {tags}")
 
-    # 3️⃣ Build Overpass query dynamically
+    #Build Overpass query dynamically
     tag_regex = "|".join(tags)
     query = f"""
     [out:json][timeout:25];
@@ -133,6 +133,6 @@ def get_nearby_places(lat, lng, radius_m=2000, included_types=None, max_results=
     # Sort by distance, limit & save to cache
     results.sort(key=lambda x: x["distance"])
     save_to_cache(cache_key, {"timestamp": time.time(), "data": results[:max_results]})
-    print("🧠 Cached new data")
+    print("Cached new data")
 
     return results[:max_results]

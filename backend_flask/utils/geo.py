@@ -1,10 +1,7 @@
 import math
 
 def calculate_distance_km(lat1, lon1, lat2, lon2):
-    """
-    Calculate distance between two points using the Haversine formula.
-    Returns distance in kilometers.
-    """
+  
     R = 6371  # Earth radius in km
     d_lat = math.radians(lat2 - lat1)
     d_lon = math.radians(lon2 - lon1)

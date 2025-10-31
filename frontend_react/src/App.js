@@ -33,7 +33,7 @@ function App() {
     { label: "Shops", value: "shops", emoji: "🛍️" },
   ];
 
-  // ---------------------- FETCH NEARBY PLACES ----------------------
+  //FETCH NEARBY PLACES
   const fetchNearbyPlaces = async (category = null) => {
     setLoading(true);
     setActiveCategory(category);
@@ -57,7 +57,7 @@ function App() {
     setLoading(false);
   };
 
-  // ---------------------- FETCH RECOMMENDATIONS ----------------------
+  //FETCH RECOMMENDATIONS
   const fetchRecommendations = async (recentCategory) => {
     try {
       const res = await fetch("http://127.0.0.1:5001/recommend", {
@@ -76,7 +76,7 @@ function App() {
     }
   };
 
-  // ---------------------- MAIN UI ----------------------
+  //MAIN UI
   return (
     <div
       style={{

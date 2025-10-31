@@ -1,4 +1,4 @@
-/* 🌅 Base Styling */
+/*Base Styling */
 body {
   margin: 0;
   padding: 0;
@@ -7,7 +7,7 @@ body {
   overflow-x: hidden;
 }
 
-/* 🌇 Hero Section Background */
+/*Hero Section Background */
 .hero-section {
   position: relative;
   height: 100vh;
@@ -20,7 +20,7 @@ body {
   overflow: hidden;
 }
 
-/* 🎨 Overlay Gradient (orange-peach glow) */
+/*Overlay Gradient (orange-peach glow) */
 .hero-overlay {
   position: absolute;
   top: 0;
@@ -46,7 +46,7 @@ body {
   100% { background-position: 0% 50%; }
 }
 
-/* 🌟 Hero Content */
+/*Hero Content */
 .hero-content {
   position: relative;
   z-index: 2;
@@ -67,7 +67,7 @@ body {
   opacity: 0.9;
 }
 
-/* 🌀 Animated Floating Icons */
+/*Animated Floating Icons */
 .animated-icons {
   position: absolute;
   top: 0;
@@ -79,7 +79,7 @@ body {
   z-index: 1;
 }
 
-/* 🎈 Individual Icons */
+/*Individual Icons */
 .animated-icons span {
   position: absolute;
   bottom: -100px;
@@ -107,13 +107,13 @@ body {
   }
 }
 
-/* 🪶 Place Cards (optional polish for consistency) */
+/*Place Cards (optional polish for consistency) */
 .MuiCard-root {
   background-color: #ffffff;
   border: 1px solid #ffecd6;
 }
 
-/* 🟠 Floating Button Shadow */
+/*Floating Button Shadow */
 .MuiFab-root {
   box-shadow: 0px 4px 18px rgba(255, 140, 66, 0.4);
 }

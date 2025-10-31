@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from config import settings
 
-# (we’ll create these route files next)
+
 from routes.places_route import places_bp
 from routes.analyze_route import analyze_bp
 from routes.recommend_route import recommend_bp

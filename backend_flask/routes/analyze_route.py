@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify
 from models.sentiment_model import analyze_sentiment
 
-# ✅ Define the Flask Blueprint object that app.py tries to import
+#Define the Flask Blueprint object that app.py tries to import
 analyze_bp = Blueprint("analyze", __name__, url_prefix="/analyze")
 
-# ---------------------- ROUTE: /analyze ----------------------
+#ROUTE: /analyze
 @analyze_bp.route("", methods=["POST"])
 def analyze_text():
     """

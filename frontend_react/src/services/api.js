@@ -2,10 +2,10 @@ import axios from "axios";
 
 
 
-// Flask backend base URL (update if needed)
+// Flask backend base URL
 const BASE_URL = "http://127.0.0.1:5001";
 
-// ---------------- Fetch nearby places ----------------
+//Fetch nearby places
 export const getNearbyPlaces = async (lat, lng) => {
   const response = await axios.post(`${BASE_URL}/places/nearby`, {
     lat,
@@ -17,7 +17,7 @@ export const getNearbyPlaces = async (lat, lng) => {
   return response.data.places;
 };
 
-// ---------------- Get AI recommendations ----------------
+//Get AI recommendations
 export const getRecommendations = async (lat, lng, places) => {
   const response = await axios.post(`${BASE_URL}/recommend`, {
     user_lat: lat,
