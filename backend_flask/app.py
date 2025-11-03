@@ -1,12 +1,11 @@
+# backend_flask/app.py
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import settings
 
-
 from routes.places_route import places_bp
 from routes.analyze_route import analyze_bp
 from routes.recommend_route import recommend_bp
-
 
 def create_app():
     app = Flask(__name__)
@@ -16,7 +15,7 @@ def create_app():
     def health():
         return jsonify({"status": "ok"}), 200
 
-    # Register routes
+    # Register blueprints
     app.register_blueprint(places_bp)
     app.register_blueprint(analyze_bp)
     app.register_blueprint(recommend_bp)
