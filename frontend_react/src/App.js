@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./App.css";
 import {
   AppBar,
@@ -10,191 +10,90 @@ import {
   CardContent,
   CircularProgress,
   Container,
+  Chip,
+  Stack,
+  TextField,
+  InputAdornment,
   IconButton,
   Menu,
   MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
-  Stack,
-  TextField,
-  Chip,
-  Box,
-  Divider,
-  List,
-  ListItemButton,
-  ListItemText,
 } from "@mui/material";
-import RoomIcon from "@mui/icons-material/Room";
-import FavoriteIcon from "@mui/icons-material/Favorite";
-import ThumbUpIcon from "@mui/icons-material/ThumbUp";
-import ThumbDownIcon from "@mui/icons-material/ThumbDown";
 import MenuIcon from "@mui/icons-material/Menu";
 import SearchIcon from "@mui/icons-material/Search";
-import { motion } from "framer-motion";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined";
+import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
+import ThumbDownAltOutlinedIcon from "@mui/icons-material/ThumbDownAltOutlined";
+import ThumbDownAltIcon from "@mui/icons-material/ThumbDownAlt";
+import RoomIcon from "@mui/icons-material/Room";
+// Line 33: Removed unused import: import { motion } from "framer-motion";
+import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// leaflet icon fix
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
 
 const API_BASE = "http://127.0.0.1:5001";
 
-// Default user location (Dallas) if geolocation is blocked
-const DEFAULT_COORDS = { lat: 32.7767, lng: -96.7970 };
-
-const CATEGORIES = [
-  { label: "All", value: null, emoji: "🧭" },
-  { label: "Cafes", value: "cafes", emoji: "☕" },
-  { label: "Parks", value: "parks", emoji: "🌳" },
-  { label: "Gyms", value: "gyms", emoji: "🏋️" },
-  { label: "Salons", value: "salons", emoji: "💇" },
-  { label: "Libraries", value: "libraries", emoji: "📚" },
-  { label: "Universities", value: "university", emoji: "🎓" },
-  { label: "Shopping Malls", value: "malls", emoji: "🛍️" },
-  { label: "Service Centers", value: "service", emoji: "🛠️" },
-  { label: "Spiritual", value: "spiritual", emoji: "🛕" },
-  { label: "Hospitals", value: "hospitals", emoji: "🏥" },
-  { label: "Supermarkets", value: "supermarkets", emoji: "🧺" },
-];
-
 function App() {
-  // UI / Theme
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [openSaved, setOpenSaved] = useState(false);
-  const [openMap, setOpenMap] = useState(false);
-  const [mapUrl, setMapUrl] = useState("");
-  const [openProfile, setOpenProfile] = useState(false);
-  const [openSettings, setOpenSettings] = useState(false);
-
-  // ========= Data =========
   const [places, setPlaces] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
+  const [recommended, setRecommended] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState(null);
-  const [coords, setCoords] = useState(DEFAULT_COORDS);
+  const [searchText, setSearchText] = useState("");
+  const [userLocation, setUserLocation] = useState({
+    lat: 32.7767,
+    lng: -96.7970,
+  });
+  const [anchorEl, setAnchorEl] = useState(null);
 
-  // Cached user interactions (persisted)
-  const [savedPlaces, setSavedPlaces] = useState([]);
-  const [likes, setLikes] = useState([]);
-  const [dislikes, setDislikes] = useState([]);
-
-  // Profile
-  const [profile, setProfile] = useState({
-    name: "Nandini",
-    email: "",
-    phone: "",
-    address: "",
+  // saved/liked/disliked local state
+  const [savedPlaces, setSavedPlaces] = useState(() => {
+    const raw = localStorage.getItem("savedPlaces");
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [likedPlaces, setLikedPlaces] = useState(() => {
+    const raw = localStorage.getItem("likedPlaces");
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [dislikedPlaces, setDislikedPlaces] = useState(() => {
+    const raw = localStorage.getItem("dislikedPlaces");
+    return raw ? JSON.parse(raw) : [];
   });
 
-  // Settings (persisted)
-  const [settings, setSettings] = useState({
-    unit: "km", // "km" or "mi"
-    radius_m: 2000,
-    max_results: 24,
-  });
+  const [mapOpen, setMapOpen] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const mapRef = useRef(null);
 
-  // Explore / Search
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const categories = [
+    { label: "All", value: null, emoji: "🌍" },
+    { label: "Cafes", value: "cafes", emoji: "☕" },
+    { label: "Parks", value: "parks", emoji: "🌳" },
+    { label: "Gyms", value: "gyms", emoji: "🏋️‍♀️" },
+    { label: "Salons", value: "salons", emoji: "💇‍♀️" },
+    { label: "Libraries", value: "libraries", emoji: "📚" },
+    { label: "Shops", value: "shops", emoji: "🛍️" },
+    { label: "Hospitals", value: "hospitals", emoji: "🏥" },
+    { label: "Supermarkets", value: "supermarkets", emoji: "🛒" },
+  ];
 
-  // Persistence 
-  useEffect(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("ls_settings"));
-      if (s) setSettings(s);
-    } catch {}
-    try {
-      setSavedPlaces(JSON.parse(localStorage.getItem("savedPlaces")) || []);
-      setLikes(JSON.parse(localStorage.getItem("likedPlaces")) || []);
-      setDislikes(JSON.parse(localStorage.getItem("dislikedPlaces")) || []);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("savedPlaces", JSON.stringify(savedPlaces));
-  }, [savedPlaces]);
-  useEffect(() => {
-    localStorage.setItem("likedPlaces", JSON.stringify(likes));
-  }, [likes]);
-  useEffect(() => {
-    localStorage.setItem("dislikedPlaces", JSON.stringify(dislikes));
-  }, [dislikes]);
-  useEffect(() => {
-    localStorage.setItem("ls_settings", JSON.stringify(settings));
-  }, [settings]);
-
-  // ========= Geolocation + Initial Nearby =========
-  useEffect(() => {
-    // Try to get precise position, else fallback
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const next = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          };
-          setCoords(next);
-          // initial fetch
-          fetchNearbyPlaces(activeCategory, next);
-        },
-        () => {
-          fetchNearbyPlaces(activeCategory, DEFAULT_COORDS);
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    } else {
-      fetchNearbyPlaces(activeCategory, DEFAULT_COORDS);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Derived search suggestions
-  const suggestions = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return (places || [])
-      .filter((p) => (p.name || "").toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [query, places]);
-
-  // ========= Helpers =========
-  const distanceText = (km) => {
-    if (km == null) return "";
-    if (settings.unit === "mi") {
-      const mi = km * 0.621371;
-      return `${mi.toFixed(2)} mi away`;
-    }
-    return `${km.toFixed(2)} km away`;
-  };
-
-  const openMapPopup = (place) => {
-    const lat = place.lat || coords.lat;
-    const lng = place.lng || coords.lng;
-    setMapUrl(`https://maps.google.com/maps?q=${lat},${lng}&z=15&output=embed`);
-    setOpenMap(true);
-  };
-
-  const toggleSave = (place) => {
-    const already = savedPlaces.find((p) => p.name === place.name);
-    if (already) setSavedPlaces(savedPlaces.filter((p) => p.name !== place.name));
-    else setSavedPlaces([...savedPlaces, place]);
-  };
-
-  const toggleLike = (place) => {
-    if (likes.includes(place.name)) setLikes(likes.filter((n) => n !== place.name));
-    else {
-      setLikes([...likes, place.name]);
-      setDislikes(dislikes.filter((n) => n !== place.name));
-    }
-  };
-
-  const toggleDislike = (place) => {
-    if (dislikes.includes(place.name)) setDislikes(dislikes.filter((n) => n !== place.name));
-    else {
-      setDislikes([...dislikes, place.name]);
-      setLikes(likes.filter((n) => n !== place.name));
-    }
-  };
-
-  // API Calls
-  const fetchNearbyPlaces = async (category = null, customCoords = null) => {
+  // Line 121: Wrapped function in useCallback, depending on userLocation
+  const fetchNearbyPlaces = useCallback(async (category = null, radius_m = 5000) => {
     setLoading(true);
     setActiveCategory(category);
     try {
@@ -202,407 +101,291 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lat: (customCoords || coords).lat,
-          lng: (customCoords || coords).lng,
-          radius_m: settings.radius_m,
+          lat: userLocation.lat,
+          lng: userLocation.lng,
+          radius_m,
           included_types: category ? [category] : [],
-          max_results: settings.max_results,
         }),
       });
       const data = await res.json();
       setPlaces(data.places || []);
-    } catch (e) {
-      console.error("nearby error:", e);
+    } catch (err) {
+      console.error("Error fetching places:", err);
     }
     setLoading(false);
-  };
-const fetchRecommendations = async (recentCategory = null) => {
-  try {
-    const res = await fetch(`${API_BASE}/recommend/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lat: coords.lat,
-        lng: coords.lng,
-        recent_category: recentCategory,
-        liked: likes,
-        disliked: dislikes,
-      }),
-    });
-    const data = await res.json();
-    setRecommendations(data.recommendations || []);
-  } catch (e) {
-    console.error("recommend error:", e);
-  }
-};
+  }, [userLocation]); // <-- userLocation dependency is correct for useCallback
 
-
-   
-
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/profile/`);
-      const data = await res.json();
-      setProfile((p) => ({ ...p, ...data }));
-    } catch (e) {
-      console.error("profile error:", e);
+  // Line 140: Added fetchNearbyPlaces to the dependency array
+  // This resolves the warning on line 135.
+  // ---------- Load nearby on startup ----------
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+          setUserLocation(coords);
+          fetchNearbyPlaces(null, 5000);
+        },
+        () => fetchNearbyPlaces(null, 5000)
+      );
+    } else {
+      fetchNearbyPlaces(null, 5000);
     }
+  }, [fetchNearbyPlaces]); // <-- Corrected dependency array
+
+  // ---------- Recommend button (basic local logic) ----------
+  const handleRecommend = () => {
+    if (likedPlaces.length === 0 && savedPlaces.length === 0) {
+      alert("Like or save places to personalize recommendations!");
+      return;
+    }
+    const likedNames = [...likedPlaces, ...savedPlaces].map((p) => p.name.toLowerCase());
+    const recs = places.filter(
+      (p) =>
+        likedNames.some((n) => p.name.toLowerCase().includes(n.split(" ")[0])) ||
+        p.type?.includes("cafe") ||
+        p.type?.includes("park")
+    );
+    setRecommended(recs.slice(0, 6));
   };
 
-  //Menu 
-  const handleMenuOpen = (e) => setAnchorEl(e.currentTarget);
-  const handleMenuClose = () => setAnchorEl(null);
+  // ---------- Save / Like / Dislike ----------
+  const toggleSave = (place) => {
+    const exists = savedPlaces.some((p) => p.name === place.name);
+    const updated = exists
+      ? savedPlaces.filter((p) => p.name !== place.name)
+      : [...savedPlaces, place];
+    setSavedPlaces(updated);
+    localStorage.setItem("savedPlaces", JSON.stringify(updated));
+  };
 
-  //Render
+  const toggleLike = (place) => {
+    const exists = likedPlaces.some((p) => p.name === place.name);
+    const updated = exists
+      ? likedPlaces.filter((p) => p.name !== place.name)
+      : [...likedPlaces, place];
+    setLikedPlaces(updated);
+    localStorage.setItem("likedPlaces", JSON.stringify(updated));
+  };
+
+  const toggleDislike = (place) => {
+    const exists = dislikedPlaces.some((p) => p.name === place.name);
+    const updated = exists
+      ? dislikedPlaces.filter((p) => p.name !== place.name)
+      : [...dislikedPlaces, place];
+    setDislikedPlaces(updated);
+    localStorage.setItem("dislikedPlaces", JSON.stringify(updated));
+  };
+
+  // Line 196: Added fetchNearbyPlaces to the dependency array
+  // This resolves the warning on line 189.
+  // ---------- Search (calls backend when typing) ----------
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchText.trim().length > 2) {
+        fetchNearbyPlaces(searchText.toLowerCase(), 15000);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [searchText, fetchNearbyPlaces]); // <-- Corrected dependency array
+
+  // Line 219: Added userLocation to the dependency array
+  // This resolves the warning on line 211.
+  // ---------- Routing ----------
+  useEffect(() => {
+    const fetchRoute = async () => {
+      if (!selectedPlace) return;
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${userLocation.lng},${userLocation.lat};${selectedPlace.lng},${selectedPlace.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.routes && data.routes.length > 0) {
+          const coords = data.routes[0].geometry.coordinates.map(([lon, lat]) => [
+            lat,
+            lon,
+          ]);
+          setRouteCoords(coords);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchRoute();
+  }, [selectedPlace, userLocation]); // <-- Corrected dependency array
+
+  // ---------- UI ----------
   return (
-    <div
-      style={{
-        backgroundColor: "#F4EFFF", // light purple
-        minHeight: "100vh",
-        fontFamily: "'Poppins','EB Garamond',serif",
-      }}
-    >
-      {/* Header */}
-      <AppBar
-        position="sticky"
-        sx={{ backgroundColor: "#5B2C98", boxShadow: "0 3px 12px rgba(0,0,0,0.15)" }}
-      >
+    <div className="app-root">
+      <AppBar position="static" sx={{ background: "#5E2B97" }}>
         <Toolbar>
-          <Typography
-            variant="h4"
-            sx={{
-              flexGrow: 1,
-              fontFamily: "'EB Garamond',serif",
-              fontWeight: 800,
-              color: "#FFF7E6",
-              letterSpacing: 0.5,
-            }}
-          >
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
             LocalSpot AI
           </Typography>
-
-          <IconButton color="inherit" onClick={handleMenuOpen}>
+          <IconButton color="inherit" onClick={(e) => setAnchorEl(e.currentTarget)}>
             <MenuIcon />
           </IconButton>
-          <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-            <MenuItem
-              onClick={() => {
-                fetchProfile();
-                setOpenProfile(true);
-                handleMenuClose();
-              }}
-            >
-              Profile Settings
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                setOpenSaved(true);
-                handleMenuClose();
-              }}
-            >
-              Saved Places ({savedPlaces.length})
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                setOpenSettings(true);
-                handleMenuClose();
-              }}
-            >
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={() => setAnchorEl(null)}
+          >
+            <MenuItem onClick={() => setSavedOpen(true)}>Saved Places</MenuItem>
+            <MenuItem onClick={() => alert("Settings coming soon!")}>
               Settings
             </MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* Hero / CTA row */}
-      <Box
-        sx={{
-          textAlign: "center",
-          pt: "2.25rem",
-          pb: "1rem",
-          color: "#3A0CA3",
-          maxWidth: "1100px",
-          mx: "auto",
-        }}
-      >
-        <Typography
-          variant="h4"
-          sx={{ color: "#5B2C98", mb: "0.35rem", fontWeight: 700, letterSpacing: 0.25 }}
-        >
-          👋 Hello, <span style={{ color: "#3A0CA3" }}>{profile.name || "Nandini"}</span>!
+      {/* Hero */}
+      <div className="hero">
+        <Typography variant="h5" sx={{ color: "#4A2B7B", fontWeight: 600 }}>
+          Hello, Nandini 👋
         </Typography>
-        <Typography
-          variant="h2"
-          sx={{
-            fontFamily: "'EB Garamond',serif",
-            fontWeight: 900,
-            color: "#2E2E2E",
-            lineHeight: 1.1,
-          }}
-        >
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "#2E2E2E" }}>
           Discover & Explore Local Gems
         </Typography>
+        <TextField
+          placeholder="Search for cafes, gyms, salons..."
+          variant="outlined"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          sx={{
+            marginTop: "1.2rem",
+            width: "100%",
+            maxWidth: "600px",
+            background: "#fff",
+            borderRadius: "10px",
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: "#5E2B97" }} />
+              </InputAdornment>
+            ),
+          }}
+        />
 
-        {/* Big CTA buttons */}
-        <Stack
-          direction="row"
-          spacing={2}
-          justifyContent="center"
-          sx={{ mt: "1.5rem", flexWrap: "wrap", rowGap: 1 }}
-        >
+        <Stack direction="row" spacing={2} justifyContent="center" sx={{ marginTop: 2 }}>
           <Button
             variant="contained"
-            onClick={() => {
-              setSearchOpen(true);
-              // refresh nearby to ensure suggestions are broad
-              fetchNearbyPlaces(activeCategory);
-            }}
-            sx={{
-              backgroundColor: "#FFF7E6",
-              color: "#5B2C98",
-              fontWeight: 800,
-              px: 5,
-              py: 1.6,
-              borderRadius: "999px",
-              textTransform: "none",
-              fontSize: "1.1rem",
-              boxShadow: "0 6px 14px rgba(91,44,152,0.22)",
-              "&:hover": { backgroundColor: "#FBEED3" },
-            }}
-            startIcon={<SearchIcon />}
+            sx={{ background: "#5E2B97", textTransform: "none" }}
+            onClick={() => fetchNearbyPlaces(null, 5000)}
           >
-            Explore
+            Explore Now
           </Button>
-
           <Button
             variant="outlined"
-            onClick={() => fetchRecommendations(activeCategory)}
-            sx={{
-              borderColor: "#5B2C98",
-              color: "#5B2C98",
-              fontWeight: 800,
-              px: 5,
-              py: 1.6,
-              borderRadius: "999px",
-              textTransform: "none",
-              fontSize: "1.1rem",
-              "&:hover": { backgroundColor: "#EADDFD" },
-            }}
+            sx={{ borderColor: "#5E2B97", color: "#5E2B97", textTransform: "none" }}
+            onClick={handleRecommend}
           >
             Recommend for Me
           </Button>
         </Stack>
 
-        {/* Search bar (expands after clicking Explore) */}
-        {searchOpen && (
-          <Box
-            sx={{
-              maxWidth: 720,
-              mx: "auto",
-              mt: 2.25,
-              p: 1.25,
-              borderRadius: "20px",
-              background: "#FFF",
-              boxShadow: "0 8px 22px rgba(0,0,0,0.10)",
-            }}
-          >
-            <TextField
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Type to search places…"
-              fullWidth
-              InputProps={{
-                sx: {
-                  fontSize: "1.05rem",
-                },
-              }}
-            />
-            {query && suggestions.length > 0 && (
-              <List dense sx={{ mt: 1, maxHeight: 260, overflowY: "auto" }}>
-                {suggestions.map((sug, i) => (
-                  <ListItemButton
-                    key={`${sug.name}-${i}`}
-                    onClick={() => {
-                      openMapPopup(sug);
-                      setQuery("");
-                      setSearchOpen(false);
-                    }}
-                  >
-                    <ListItemText
-                      primary={sug.name}
-                      secondary={sug.formattedAddress || sug.type}
-                    />
-                  </ListItemButton>
-                ))}
-              </List>
-            )}
-          </Box>
-        )}
-      </Box>
-
-      {/* Category chips */}
-      <Container sx={{ mb: 2 }}>
+        {/* Categories */}
         <Stack
           direction="row"
           spacing={1}
-          sx={{ flexWrap: "wrap", rowGap: 1 }}
           justifyContent="center"
+          sx={{ flexWrap: "wrap", marginTop: "1.5rem" }}
         >
-          {CATEGORIES.map((c) => (
+          {categories.map((cat) => (
             <Chip
-              key={c.label}
-              label={`${c.emoji} ${c.label}`}
-              onClick={() => fetchNearbyPlaces(c.value)}
+              key={cat.label}
+              label={`${cat.emoji} ${cat.label}`}
+              onClick={() => fetchNearbyPlaces(cat.value, 24000)}
               sx={{
-                fontWeight: 700,
-                backgroundColor: activeCategory === c.value ? "#5B2C98" : "#FFF",
-                color: activeCategory === c.value ? "#FFF7E6" : "#5B2C98",
-                border: "1.5px solid #5B2C98",
-                "&:hover": {
-                  backgroundColor: activeCategory === c.value ? "#4A2380" : "#EADDFD",
-                },
+                background:
+                  activeCategory === cat.value ? "#5E2B97" : "rgba(94,43,151,0.05)",
+                color: activeCategory === cat.value ? "#fff" : "#3C304F",
               }}
             />
           ))}
         </Stack>
-      </Container>
+      </div>
 
-      {/* Content */}
-      <Container sx={{ pb: "4rem" }}>
+      <Container sx={{ marginTop: "2rem" }}>
         {loading ? (
-          <Box sx={{ textAlign: "center", mt: 6 }}>
-            <CircularProgress color="secondary" />
-            <Typography sx={{ mt: 2, color: "#5B2C98" }}>Finding local spots…</Typography>
-          </Box>
+          <div className="centered">
+            <CircularProgress sx={{ color: "#5E2B97" }} />
+          </div>
         ) : (
           <>
-            {/* Nearby */}
-            <Typography
-              variant="h5"
-              sx={{ mt: 1, mb: 2, fontWeight: 800, color: "#3A0CA3" }}
-            >
-              {activeCategory ? `Nearby ${activeCategory}` : "Nearby Spots"}
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Nearby Spots
             </Typography>
-            <Grid container spacing={3}>
-              {places.map((place, i) => (
-                <Grid item xs={12} sm={6} md={4} key={`near-${i}`}>
-                  <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}>
-                    <Card
-                      sx={{
-                        borderRadius: "16px",
-                        backgroundColor: "#FFF9F3",
-                        boxShadow: "0 4px 12px rgba(91,44,152,0.15)",
-                        "&:hover": { transform: "translateY(-6px)" },
-                      }}
-                    >
-                      <CardContent>
-                        <Typography variant="h6" sx={{ color: "#3A0CA3", fontWeight: 800 }}>
-                          {place.name}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: "#5B2C98", mt: 0.5 }}>
-                          📍 {place.formattedAddress || place.type || "—"}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ mt: 0.8, color: "#8E79C7", display: "flex", alignItems: "center" }}
-                        >
-                          <RoomIcon fontSize="small" sx={{ mr: 1 }} />
-                          {place.distance != null ? distanceText(place.distance) : ""}
-                        </Typography>
-
-                        <Stack direction="row" spacing={1.5} sx={{ mt: 1 }}>
-                          <Button
-                            size="small"
-                            onClick={() => openMapPopup(place)}
-                            sx={{ textTransform: "none", color: "#5B2C98", fontWeight: 700 }}
-                          >
-                            Open Map
-                          </Button>
-                          <IconButton
-                            onClick={() => toggleLike(place)}
-                            sx={{
-                              color: likes.includes(place.name) ? "#5B2C98" : "#B6A9D6",
-                            }}
-                          >
-                            <ThumbUpIcon />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => toggleDislike(place)}
-                            sx={{
-                              color: dislikes.includes(place.name) ? "#C23B22" : "#B6A9D6",
-                            }}
-                          >
-                            <ThumbDownIcon />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => toggleSave(place)}
-                            sx={{
-                              color: savedPlaces.find((p) => p.name === place.name)
-                                ? "#E91E63"
-                                : "#B6A9D6",
-                            }}
-                          >
-                            <FavoriteIcon />
-                          </IconButton>
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+            <Grid container spacing={2} sx={{ marginTop: 1 }}>
+              {places.map((place, idx) => (
+                <Grid item xs={12} sm={6} md={4} key={idx}>
+                  <Card
+                    onClick={() => setSelectedPlace(place) || setMapOpen(true)}
+                    sx={{ borderRadius: "14px", cursor: "pointer" }}
+                  >
+                    <CardContent>
+                      <Typography variant="h6">{place.name}</Typography>
+                      <Typography sx={{ color: "#6F5C8E" }}>{place.type}</Typography>
+                      <Typography sx={{ color: "#5E2B97" }}>
+                        <RoomIcon sx={{ fontSize: 18 }} />{" "}
+                        {place.distance ? `${place.distance} mi away` : ""}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ marginTop: 1 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <IconButton onClick={() => toggleSave(place)}>
+                          {savedPlaces.some((p) => p.name === place.name) ? (
+                            <FavoriteIcon sx={{ color: "#5E2B97" }} />
+                          ) : (
+                            <FavoriteBorderIcon sx={{ color: "#5E2B97" }} />
+                          )}
+                        </IconButton>
+                        <IconButton onClick={() => toggleLike(place)}>
+                          {likedPlaces.some((p) => p.name === place.name) ? (
+                            <ThumbUpAltIcon sx={{ color: "#5E2B97" }} />
+                          ) : (
+                            <ThumbUpAltOutlinedIcon sx={{ color: "#5E2B97" }} />
+                          )}
+                        </IconButton>
+                        <IconButton onClick={() => toggleDislike(place)}>
+                          {dislikedPlaces.some((p) => p.name === place.name) ? (
+                            <ThumbDownAltIcon sx={{ color: "#5E2B97" }} />
+                          ) : (
+                            <ThumbDownAltOutlinedIcon sx={{ color: "#5E2B97" }} />
+                          )}
+                        </IconButton>
+                      </Stack>
+                    </CardContent>
+                  </Card>
                 </Grid>
               ))}
             </Grid>
 
-            {/* Recommendations */}
-            {recommendations.length > 0 && (
+            {recommended.length > 0 && (
               <>
-                <Divider sx={{ my: 4 }} />
                 <Typography
-                  variant="h5"
-                  sx={{ mb: 2, fontWeight: 800, color: "#C05621" }}
+                  variant="h6"
+                  sx={{ fontWeight: 600, marginTop: "2rem", color: "#5E2B97" }}
                 >
                   Recommended for You
                 </Typography>
-                <Grid container spacing={3}>
-                  {recommendations.map((place, i) => (
-                    <Grid item xs={12} sm={6} md={4} key={`rec-${i}`}>
-                      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}>
-                        <Card
-                          sx={{
-                            borderRadius: "16px",
-                            backgroundColor: "#FFF9F3",
-                            boxShadow: "0 4px 12px rgba(91,44,152,0.15)",
-                            "&:hover": { transform: "translateY(-6px)" },
-                          }}
-                        >
-                          <CardContent>
-                            <Typography variant="h6" sx={{ color: "#3A0CA3", fontWeight: 800 }}>
-                              {place.name}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: "#5B2C98", mt: 0.5 }}>
-                              📍 {place.formattedAddress || place.type || "—"}
-                            </Typography>
-                            <Stack direction="row" spacing={1.5} sx={{ mt: 1 }}>
-                              <Button
-                                size="small"
-                                onClick={() => openMapPopup(place)}
-                                sx={{ textTransform: "none", color: "#5B2C98", fontWeight: 700 }}
-                              >
-                                Open Map
-                              </Button>
-                              <IconButton
-                                onClick={() => toggleSave(place)}
-                                sx={{
-                                  color: savedPlaces.find((p) => p.name === place.name)
-                                    ? "#E91E63"
-                                    : "#B6A9D6",
-                                }}
-                              >
-                                <FavoriteIcon />
-                              </IconButton>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
+                <Grid container spacing={2} sx={{ marginTop: 1 }}>
+                  {recommended.map((p, i) => (
+                    <Grid item xs={12} sm={6} md={4} key={i}>
+                      <Card
+                        onClick={() => setSelectedPlace(p) || setMapOpen(true)}
+                        sx={{ borderRadius: "14px" }}
+                      >
+                        <CardContent>
+                          <Typography variant="h6">{p.name}</Typography>
+                          <Typography sx={{ color: "#6F5C8E" }}>{p.type}</Typography>
+                        </CardContent>
+                      </Card>
                     </Grid>
                   ))}
                 </Grid>
@@ -612,243 +395,56 @@ const fetchRecommendations = async (recentCategory = null) => {
         )}
       </Container>
 
-      {/* Saved Places Dialog */}
-      <Dialog open={openSaved} onClose={() => setOpenSaved(false)} fullWidth maxWidth="md">
-        <DialogTitle
-          sx={{
-            backgroundColor: "#5B2C98",
-            color: "#FFF7E6",
-            fontFamily: "'EB Garamond',serif",
-            fontWeight: 800,
-          }}
-        >
-          ❤️ Your Saved Places
-        </DialogTitle>
-        <DialogContent sx={{ backgroundColor: "#F4EFFF", p: 3 }}>
-          {savedPlaces.length === 0 ? (
-            <Typography sx={{ textAlign: "center", color: "#5B2C98" }}>
-              You haven’t saved any places yet.
-            </Typography>
-          ) : (
-            <Grid container spacing={3}>
-              {savedPlaces.map((place, i) => (
-                <Grid item xs={12} sm={6} md={4} key={`saved-${i}`}>
-                  <Card
-                    sx={{
-                      borderRadius: "16px",
-                      backgroundColor: "#FFF9F3",
-                      boxShadow: "0 4px 12px rgba(91,44,152,0.15)",
-                    }}
-                  >
-                    <CardContent>
-                      <Typography variant="h6" sx={{ color: "#3A0CA3", fontWeight: 800 }}>
-                        {place.name}
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: "#5B2C98", mt: 0.5 }}>
-                        📍 {place.formattedAddress || place.type || "—"}
-                      </Typography>
-                      <Stack direction="row" spacing={1.5} sx={{ mt: 1 }}>
-                        <Button
-                          onClick={() => openMapPopup(place)}
-                          sx={{
-                            textTransform: "none",
-                            backgroundColor: "#5B2C98",
-                            color: "#FFF7E6",
-                            borderRadius: "20px",
-                            px: 2,
-                            "&:hover": { backgroundColor: "#4C1E86" },
-                          }}
-                        >
-                          View on Map
-                        </Button>
-                        <Button
-                          onClick={() => toggleSave(place)}
-                          sx={{
-                            textTransform: "none",
-                            color: "#C23B22",
-                            fontWeight: 700,
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
+      {/* Map modal */}
+      <Dialog open={mapOpen} onClose={() => setMapOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>{selectedPlace?.name || "Map"}</DialogTitle>
+        <DialogContent sx={{ height: "400px" }}>
+          {selectedPlace && (
+            <MapContainer
+              center={[selectedPlace.lat, selectedPlace.lng]}
+              zoom={13}
+              style={{ height: "100%", width: "100%" }}
+              whenCreated={(map) => (mapRef.current = map)}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <Marker position={[userLocation.lat, userLocation.lng]} />
+              <Marker position={[selectedPlace.lat, selectedPlace.lng]} />
+              {routeCoords.length > 0 && (
+                <Polyline positions={routeCoords} pathOptions={{ color: "#5E2B97" }} />
+              )}
+            </MapContainer>
           )}
         </DialogContent>
-        <DialogActions sx={{ backgroundColor: "#F4EFFF" }}>
-          <Button
-            onClick={() => setOpenSaved(false)}
-            sx={{
-              backgroundColor: "#5B2C98",
-              color: "#FFF7E6",
-              borderRadius: "20px",
-              "&:hover": { backgroundColor: "#4C1E86" },
-            }}
-          >
-            Close
-          </Button>
-        </DialogActions>
       </Dialog>
 
-      {/* Profile Dialog */}
-      <Dialog open={openProfile} onClose={() => setOpenProfile(false)} fullWidth maxWidth="sm">
-        <DialogTitle
-          sx={{
-            backgroundColor: "#5B2C98",
-            color: "#FFF7E6",
-            fontFamily: "'EB Garamond',serif",
-            fontWeight: 800,
-          }}
-        >
-          👤 Profile Settings
-        </DialogTitle>
-        <DialogContent sx={{ backgroundColor: "#F4EFFF", p: 3 }}>
-          <Stack spacing={2}>
-            <TextField
-              label="Full Name"
-              value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Email"
-              value={profile.email}
-              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Phone"
-              value={profile.phone}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Address"
-              value={profile.address}
-              onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-              fullWidth
-            />
-          </Stack>
+      {/* Saved places modal */}
+      <Dialog open={savedOpen} onClose={() => setSavedOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Saved Places</DialogTitle>
+        <DialogContent>
+          {savedPlaces.length === 0 ? (
+            <Typography>No saved places yet.</Typography>
+          ) : (
+            savedPlaces.map((p, i) => (
+              <Stack
+                key={i}
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ paddingY: 1 }}
+              >
+                <Typography>{p.name}</Typography>
+                <Button
+                  variant="text"
+                  color="error"
+                  onClick={() => toggleSave(p)}
+                  sx={{ textTransform: "none" }}
+                >
+                  Remove
+                </Button>
+              </Stack>
+            ))
+          )}
         </DialogContent>
-        <DialogActions sx={{ backgroundColor: "#F4EFFF" }}>
-          <Button onClick={() => setOpenProfile(false)} sx={{ color: "#5B2C98" }}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={async () => {
-              await fetch(`${API_BASE}/profile/update`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(profile),
-              });
-              setOpenProfile(false);
-            }}
-            sx={{ backgroundColor: "#5B2C98" }}
-          >
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Settings Dialog */}
-      <Dialog open={openSettings} onClose={() => setOpenSettings(false)} fullWidth maxWidth="sm">
-        <DialogTitle
-          sx={{
-            backgroundColor: "#5B2C98",
-            color: "#FFF7E6",
-            fontFamily: "'EB Garamond',serif",
-            fontWeight: 800,
-          }}
-        >
-          ⚙️ Settings
-        </DialogTitle>
-        <DialogContent sx={{ backgroundColor: "#F4EFFF", p: 3 }}>
-          <Stack spacing={2}>
-            <TextField
-              select
-              label="Distance Unit"
-              value={settings.unit}
-              onChange={(e) => setSettings({ ...settings, unit: e.target.value })}
-              SelectProps={{ native: true }}
-              fullWidth
-            >
-              <option value="km">Kilometers</option>
-              <option value="mi">Miles</option>
-            </TextField>
-
-            <TextField
-              type="number"
-              label="Default Radius (meters)"
-              value={settings.radius_m}
-              onChange={(e) =>
-                setSettings({ ...settings, radius_m: Math.max(200, Number(e.target.value) || 200) })
-              }
-              fullWidth
-            />
-
-            <TextField
-              type="number"
-              label="Max Results"
-              value={settings.max_results}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  max_results: Math.min(60, Math.max(6, Number(e.target.value) || 24)),
-                })
-              }
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ backgroundColor: "#F4EFFF" }}>
-          <Button onClick={() => setOpenSettings(false)} sx={{ color: "#5B2C98" }}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Map Dialog */}
-      <Dialog open={openMap} onClose={() => setOpenMap(false)} fullWidth maxWidth="md">
-        <DialogTitle
-          sx={{
-            backgroundColor: "#5B2C98",
-            color: "#FFF7E6",
-            fontFamily: "'EB Garamond',serif",
-            fontWeight: 800,
-          }}
-        >
-          📍 Location View
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          <iframe
-            src={mapUrl}
-            width="100%"
-            height="420"
-            style={{ border: 0 }}
-            allowFullScreen
-            loading="lazy"
-            title="map"
-          />
-        </DialogContent>
-        <DialogActions sx={{ backgroundColor: "#F4EFFF" }}>
-          <Button
-            onClick={() => setOpenMap(false)}
-            sx={{
-              backgroundColor: "#5B2C98",
-              color: "#FFF7E6",
-              borderRadius: "20px",
-              px: 3,
-              "&:hover": { backgroundColor: "#4C1E86" },
-            }}
-          >
-            Close
-          </Button>
-        </DialogActions>
       </Dialog>
     </div>
   );
